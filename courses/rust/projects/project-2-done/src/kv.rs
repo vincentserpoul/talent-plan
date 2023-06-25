@@ -59,21 +59,6 @@ impl KvStore {
 
     /// Set the value of a string key to a string.
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
-        //open pathbuf at offset
-        let mut path = self.path.clone();
-        path.push(LOG_FILE);
-
-        let mut file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)?;
-
-        writeln!(
-            file,
-            "{}",
-            json!(KvCommand::Set(key.clone(), value.clone()))
-        )?;
-
         self.map.insert(key, value);
 
         Ok(())
@@ -94,18 +79,37 @@ impl KvStore {
             return Err(KvsError::KeyNotFound);
         }
 
-        let mut path = self.path.clone();
-        path.push("log");
-        let mut file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)?;
-
-        writeln!(file, "{}", json!(KvCommand::Remove(key.clone())))?;
-
         self.map.remove(&key);
 
         Ok(())
+    }
+}
+
+impl Drop for KvStore {
+    /// rewrite the log with the corresponding map
+    fn drop(&mut self) {
+        // delete the log file
+        let mut path = self.path.clone();
+        path.push(LOG_FILE);
+
+        // create a new log file
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(path)
+            .unwrap();
+
+        // iterate through the map and write insert commands for the existing keys
+        // to the log file
+        let mut writer = std::io::BufWriter::new(file);
+        for (key, value) in &self.map {
+            let command = KvCommand::Set(key.to_owned(), value.to_owned());
+            writeln!(writer, "{}", json!(command)).unwrap();
+        }
+
+        // close the file
+        writer.flush().unwrap();
     }
 }
 
