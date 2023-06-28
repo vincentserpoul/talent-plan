@@ -1,9 +1,9 @@
 [package]
 name = "kvs"
 version = "0.1.0"
-authors = ["Yilin Chen <sticnarf@gmail.com>"]
+authors = ["Vincent Serpoul <vincent@serpoul.com>"]
 description = "A key-value store"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 clap = { version = "^4", features = ["derive"] }
