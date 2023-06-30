@@ -1,5 +1,7 @@
 use clap::{Parser, Subcommand};
 use kvs::{KvStore, Result};
+use log::{info, trace};
+use std::net::{TcpListener, TcpStream};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -20,6 +22,11 @@ enum Commands {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    env_logger::init();
+
+    let connection = TcpStream::connect("127.0.0.1:4001")?;
+
+    info!("connected");
 
     let mut store = KvStore::open(std::path::Path::new("./"))?; // TODO: make this configurable
 

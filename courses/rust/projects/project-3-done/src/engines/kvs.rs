@@ -3,6 +3,7 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
+
 /// The `KvStore` stores string key/value pairs.
 pub struct KvStore {
     map: HashMap<String, String>,
