@@ -1,13 +1,16 @@
 use clap::{Parser, Subcommand};
 use kvs::{KvStore, Result};
 use log::{info, trace};
-use std::net::{TcpListener, TcpStream};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
+
+    #[arg(long, global = true)]
+    addr: Option<SocketAddr>,
 }
 
 #[derive(Subcommand)]
@@ -24,7 +27,13 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     env_logger::init();
 
-    let connection = TcpStream::connect("127.0.0.1:4001")?;
+    let cli_addr = if let Some(addr) = cli.addr {
+        addr
+    } else {
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 4000)
+    };
+
+    let connection = TcpStream::connect(cli_addr)?;
 
     info!("connected");
 
