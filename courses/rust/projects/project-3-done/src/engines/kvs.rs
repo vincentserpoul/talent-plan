@@ -1,8 +1,11 @@
 use crate::errors::{KvsError, Result};
+use crate::KvsEngine;
 use serde_json::json;
 use std::collections::HashMap;
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
+
+use super::KvCommand;
 
 /// The `KvStore` stores string key/value pairs.
 pub struct KvStore {
@@ -57,16 +60,18 @@ impl KvStore {
 
         Ok(())
     }
+}
 
+impl KvsEngine for KvStore {
     /// Set the value of a string key to a string.
-    pub fn set(&mut self, key: String, value: String) -> Result<()> {
+    fn set(&mut self, key: String, value: String) -> Result<()> {
         self.map.insert(key, value);
 
         Ok(())
     }
 
     /// Get the string value of a given string key.
-    pub fn get(&self, key: String) -> Result<Option<String>> {
+    fn get(&mut self, key: String) -> Result<Option<String>> {
         match self.map.get(&key) {
             Some(value) => Ok(Some(value.to_owned())),
             None => Ok(None),
@@ -74,7 +79,7 @@ impl KvStore {
     }
 
     /// Remove a given string key.
-    pub fn remove(&mut self, key: String) -> Result<()> {
+    fn remove(&mut self, key: String) -> Result<()> {
         // check that the key exists first
         if !self.map.contains_key(&key) {
             return Err(KvsError::KeyNotFound);
@@ -112,13 +117,4 @@ impl Drop for KvStore {
         // close the file
         writer.flush().unwrap();
     }
-}
-
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum KvCommand {
-    Get(String),
-    Set(String, String),
-    Remove(String),
 }

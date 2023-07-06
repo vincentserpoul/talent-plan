@@ -15,8 +15,15 @@ pub enum KvsError {
     /// This error is returned when a key is not found.
     #[error("Key not found")]
     KeyNotFound,
+    /// Unexpected command type error.
     #[error("unknown data store error")]
     Unknown,
+    /// Sled error.
+    #[error("sled error: {0}")]
+    Sled(#[from] sled::Error),
+    /// String error.
+    #[error("string error: {0}")]
+    FromUtf8Error(#[from] std::string::FromUtf8Error),
 }
 
 /// Result type for kvs.

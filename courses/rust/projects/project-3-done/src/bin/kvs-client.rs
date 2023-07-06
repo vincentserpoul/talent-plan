@@ -1,7 +1,9 @@
 use clap::{Parser, Subcommand};
-use kvs::{KvStore, Result};
-use log::{info, trace};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream};
+use kvs::{KvCommand, Result};
+use log::info;
+use serde_json::json;
+use std::io::prelude::*;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -23,6 +25,16 @@ enum Commands {
     Rm { key: String },
 }
 
+impl From<Commands> for KvCommand {
+    fn from(cmd: Commands) -> Self {
+        match cmd {
+            Commands::Get { key } => KvCommand::Get(key),
+            Commands::Set { key, value } => KvCommand::Set(key, value),
+            Commands::Rm { key } => KvCommand::Remove(key),
+        }
+    }
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     env_logger::init();
@@ -33,36 +45,31 @@ fn main() -> Result<()> {
         SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 4000)
     };
 
-    let connection = TcpStream::connect(cli_addr)?;
+    let mut connection = TcpStream::connect(cli_addr)?;
 
     info!("connected");
 
-    let mut store = KvStore::open(std::path::Path::new("./"))?; // TODO: make this configurable
+    let cmd = KvCommand::from(cli.command);
 
-    // You can check for the existence of subcommands, and if found use their
-    // matches just as you would the top level cmd
-    match &cli.command {
-        Commands::Get { key } => match store.get(key.to_string()) {
-            Ok(Some(value)) => {
-                println!("{}", value);
-                Ok(())
-            }
-            Ok(None) => {
-                println!("Key not found");
-                Ok(())
-            }
-            Err(e) => {
-                eprintln!("{:?}", e);
-                std::process::exit(1);
-            }
-        },
-        Commands::Set { key, value } => store.set(key.to_string(), value.to_string()),
-        Commands::Rm { key } => match store.remove(key.to_string()) {
-            Ok(_) => Ok(()),
-            _ => {
-                println!("Key not found");
-                std::process::exit(1);
-            }
-        },
+    writeln!(connection, "{}", json!(cmd))?;
+
+    let mut reader = std::io::BufReader::new(connection.try_clone().unwrap());
+    let mut line = String::new();
+    reader.read_line(&mut line).unwrap();
+
+    let line = line.trim();
+    if !line.is_empty() {
+        if line.contains("error: ") {
+            eprint!("{}", &line[7..]);
+            std::process::exit(1);
+        }
+
+        if line.contains("Key not found") {
+            print!("{}", &line);
+        } else {
+            println!("{}", line);
+        }
     }
+
+    Ok(())
 }
