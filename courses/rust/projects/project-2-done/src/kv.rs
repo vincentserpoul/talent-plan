@@ -6,10 +6,12 @@ use std::path::{Path, PathBuf};
 /// The `KvStore` stores string key/value pairs.
 pub struct KvStore {
     map: HashMap<String, String>,
+    last_compacted: u64,
     path: PathBuf,
 }
 
 const LOG_FILE: &str = "log";
+const COMPACT_THRESHOLD: u64 = 100;
 
 impl KvStore {
     /// Open a `KvStore` from a given path.
@@ -18,6 +20,7 @@ impl KvStore {
 
         let mut kv_store = KvStore {
             map: HashMap::new(),
+            last_compacted: 0,
             path: _path.to_owned(),
         };
 
@@ -61,6 +64,12 @@ impl KvStore {
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
         self.map.insert(key, value);
 
+        self.last_compacted += 1;
+
+        if self.last_compacted > COMPACT_THRESHOLD {
+            self.compact();
+        }
+
         Ok(())
     }
 
@@ -83,11 +92,8 @@ impl KvStore {
 
         Ok(())
     }
-}
 
-impl Drop for KvStore {
-    /// rewrite the log with the corresponding map
-    fn drop(&mut self) {
+    fn compact(&mut self) {
         // delete the log file
         let mut path = self.path.clone();
         path.push(LOG_FILE);
@@ -110,6 +116,15 @@ impl Drop for KvStore {
 
         // close the file
         writer.flush().unwrap();
+
+        self.last_compacted = 0;
+    }
+}
+
+impl Drop for KvStore {
+    /// rewrite the log with the corresponding map
+    fn drop(&mut self) {
+        self.compact();
     }
 }
 
