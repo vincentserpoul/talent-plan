@@ -10,19 +10,24 @@ use super::KvCommand;
 /// The `KvStore` stores string key/value pairs.
 pub struct KvStore {
     map: HashMap<String, String>,
+    last_compacted: u64,
     path: PathBuf,
 }
 
 const LOG_FILE: &str = "log";
+const COMPACT_THRESHOLD: u64 = 1;
 
 impl KvStore {
     /// Open a `KvStore` from a given path.
-    pub fn open(_path: &Path) -> Result<KvStore> {
-        std::fs::create_dir_all(_path)?;
+    pub fn open(path: &Path) -> Result<KvStore> {
+        std::fs::create_dir_all(path)?;
+        let mut path = path.to_owned();
+        path.push(LOG_FILE);
 
         let mut kv_store = KvStore {
             map: HashMap::new(),
-            path: _path.to_owned(),
+            last_compacted: 0,
+            path,
         };
 
         kv_store.read_log()?;
@@ -33,12 +38,9 @@ impl KvStore {
     /// Read the log from file and apply to the hashmap
     /// This is called on open
     fn read_log(&mut self) -> Result<()> {
-        let mut path = self.path.clone();
-        path.push(LOG_FILE);
-
         // if file can be opened, read it
         // otherwise exit with no error
-        let file = match std::fs::OpenOptions::new().read(true).open(path) {
+        let file = match std::fs::OpenOptions::new().read(true).open(&self.path) {
             Ok(file) => file,
             Err(_) => return Ok(()),
         };
@@ -60,12 +62,53 @@ impl KvStore {
 
         Ok(())
     }
+
+    fn compact(&mut self) {
+        // create a new log file
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&self.path)
+            .unwrap();
+
+        // iterate through the map and write insert commands for the existing keys
+        // to the log file
+        let mut writer = std::io::BufWriter::new(file);
+        for (key, value) in &self.map {
+            let command = KvCommand::Set(key.to_owned(), value.to_owned());
+            writeln!(writer, "{}", json!(command)).unwrap();
+        }
+
+        // close the file
+        writer.flush().unwrap();
+
+        self.last_compacted = 0;
+    }
 }
 
 impl KvsEngine for KvStore {
     /// Set the value of a string key to a string.
     fn set(&mut self, key: String, value: String) -> Result<()> {
-        self.map.insert(key, value);
+        self.map.insert(key.clone(), value.clone());
+
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&self.path)
+            .unwrap();
+
+        // write the command into the log file
+        let mut writer = std::io::BufWriter::new(file);
+        writeln!(writer, "{}", json!(KvCommand::Set(key, value)))?;
+        writer.flush()?;
+
+        self.last_compacted += 1;
+
+        if self.last_compacted > COMPACT_THRESHOLD {
+            self.compact();
+        }
 
         Ok(())
     }
@@ -87,6 +130,24 @@ impl KvsEngine for KvStore {
 
         self.map.remove(&key);
 
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&self.path)
+            .unwrap();
+
+        // write the command into the log file
+        let mut writer = std::io::BufWriter::new(file);
+        writeln!(writer, "{}", json!(KvCommand::Remove(key)))?;
+        writer.flush()?;
+
+        self.last_compacted += 1;
+
+        if self.last_compacted > COMPACT_THRESHOLD {
+            self.compact();
+        }
+
         Ok(())
     }
 }
@@ -94,27 +155,6 @@ impl KvsEngine for KvStore {
 impl Drop for KvStore {
     /// rewrite the log with the corresponding map
     fn drop(&mut self) {
-        // delete the log file
-        let mut path = self.path.clone();
-        path.push(LOG_FILE);
-
-        // create a new log file
-        let file = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(path)
-            .unwrap();
-
-        // iterate through the map and write insert commands for the existing keys
-        // to the log file
-        let mut writer = std::io::BufWriter::new(file);
-        for (key, value) in &self.map {
-            let command = KvCommand::Set(key.to_owned(), value.to_owned());
-            writeln!(writer, "{}", json!(command)).unwrap();
-        }
-
-        // close the file
-        writer.flush().unwrap();
+        self.compact();
     }
 }
