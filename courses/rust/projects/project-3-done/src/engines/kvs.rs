@@ -15,7 +15,7 @@ pub struct KvStore {
 }
 
 const LOG_FILE: &str = "log";
-const COMPACT_THRESHOLD: u64 = 1;
+const COMPACT_THRESHOLD: u64 = 100;
 
 impl KvStore {
     /// Open a `KvStore` from a given path.
