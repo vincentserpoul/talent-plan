@@ -35,3 +35,11 @@ test = false
 [[bin]]
 name = "kvs-server"
 test = false
+
+[[bench]]
+name = "write"
+harness = false
+
+[[bench]]
+name = "read"
+harness = false
